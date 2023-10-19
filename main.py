@@ -39,6 +39,9 @@ strategy_congregator.print_core()
 # TODO serialize congregator -> use json
 
 # TODO
+# prioritize aggregating core data for all tickers into a csv and updating it semi regularly then pull data from that csv instead of through api calls
+# what to do about yahoo finance IV being inconsistent? -> own pricing model?
+# create output data file that has information needed for option trading strategy readily available -> this way won't need to make api calls and the screener will be much faster -> 
 # why is get_dividends not returning the last two years?
 # Scanner: search high intrinsic value high cashflow and high standard deviation -> slow because of yahoo finance web scrape call -> run every day after market close and use that number as share price -> how to run schedule?
 # DCF: Take average of last 5 years cashflow, project at +2% terminal, wacc 12% - Intrinsic Value: Current assets - liabilities + leases -> DCF is expected return, stdev of cashflows last 5 years is risk -> Where to get more years financial data?

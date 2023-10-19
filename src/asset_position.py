@@ -190,6 +190,10 @@ class AssetPosition:
         d = d.replace(year = d.year - 1)
 
         dividends_last_year = dividends[dividends.index.to_pydatetime() > d]
+
+        if len(dividends_last_year) == 0:
+            return 0
+
         recent_dividend = dividends_last_year.iloc[-1]["dividend"]
 
         return recent_dividend * len(dividends_last_year) / self.get_price()

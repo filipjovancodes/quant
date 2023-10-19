@@ -1,3 +1,4 @@
 ib_insync
 yahoo_fin
 yfinance
+jsonpickle

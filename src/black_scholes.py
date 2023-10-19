@@ -8,7 +8,7 @@ from pandas import DataFrame
 # TODO put into class
 
 def d1(S,K,T,r,iv):
-    return(log(S/K)+(r+iv**2/2.)*T)/iv*sqrt(T)
+    return(log(S/K)+(r+iv**2/2)*T)/iv*sqrt(T)
 def d2(S,K,T,r,iv):
     return d1(S,K,T,r,iv)-iv*sqrt(T)
 
@@ -41,12 +41,27 @@ def put_rho(S,K,T,r,iv):
 
 # r = get_price("^IRX")
 # r = r/100; iv = iv/100; -> get iv (iv) from yahoo finance
-
-def get_price_greeks(S, K, T, r, iv, right):
-    if right == "Call":
-        price_and_greeks = [bs_call(S,K,T,r,iv), call_delta(S,K,T,r,iv), call_gamma(S,K,T,r,iv),call_vega(S,K,T,r,iv), call_rho(S,K,T,r,iv), call_theta(S,K,T,r,iv)]
+# price, delta, gamma, vega, rho, theta, 
+def get_price_and_greeks(S, K, T, r, iv, right):
+    if right == "C":
+        return bs_call(S,K,T,r,iv), call_delta(S,K,T,r,iv), call_gamma(S,K,T,r,iv),call_vega(S,K,T,r,iv), call_rho(S,K,T,r,iv), call_theta(S,K,T,r,iv)
     else:
-        price_and_greeks = [bs_put(S,K,T,r,iv), put_delta(S,K,T,r,iv), put_gamma(S,K,T,r,iv),put_vega(S,K,T,r,iv), put_rho(S,K,T,r,iv), put_theta(S,K,T,r,iv)]
-    return DataFrame(price_and_greeks, columns=['Call','Put'], index=['Price', 'delta', 'gamma','vega','rho','theta'])
+        return bs_put(S,K,T,r,iv), put_delta(S,K,T,r,iv), put_gamma(S,K,T,r,iv),put_vega(S,K,T,r,iv), put_rho(S,K,T,r,iv), put_theta(S,K,T,r,iv)
 
-
+def implied_volatility(Price,S,K,T,r, right):
+    iv = 0.001
+    if right == "C":
+        while iv < 1:
+            Price_implied = S*norm.cdf(d1(S,K,T,r,iv))-K*exp(-r*T)*norm.cdf(d2(S,K,T,r,iv))
+            if Price-(Price_implied) < 0.001:
+                return iv
+            iv += 0.001
+        return None
+    else:
+        while iv < 1:
+            Price_implied = K*exp(-r*T)-S+bs_call(S,K,T,r,iv)
+            if Price-(Price_implied) < 0.001:
+                return iv
+            iv += 0.001
+        return None
+    

@@ -30,6 +30,10 @@ class OptionPosition(AssetPosition):
         d = d.replace(year = d.year - 1)
 
         dividends_last_year = dividends[dividends.index.to_pydatetime() > d]
+
+        if len(dividends_last_year) == 0:
+            return 0
+        
         dividend_days = 365/len(dividends_last_year)
         days_since_last_dividend = (datetime.now() - dividends_last_year.index.to_pydatetime()[-1]).days
         days_to_next_dividend = dividend_days - days_since_last_dividend

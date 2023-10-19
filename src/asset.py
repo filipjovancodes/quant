@@ -1,4 +1,6 @@
 import math
+import src.black_scholes as black_scholes
+import src.option as option
 from dateutil.relativedelta import relativedelta
 from datetime import datetime
 from ib_insync import *
@@ -55,7 +57,7 @@ class Asset:
         return float(percent)/100
     
     def get_option_chain_row(self, symbol: str, right: str, strike: float, contractDate: str):
-        optionType = "calls" if right == "C" else "puts"
+        optionType = "calls" if right == "C" else "put"
         options_chain = op.get_options_chain(symbol, contractDate)[optionType]
 
         return options_chain.loc[options_chain["Strike"] == strike] 
@@ -71,7 +73,12 @@ class Asset:
         return result
 
     def get_option_iv(self, symbol: str, right: str, strike: float, contractDate: str) -> float:
-        return self.get_option_chain_item(symbol, right, strike, contractDate, "Implied Volatility")
+        iv = self.get_option_chain_item(symbol, right, strike, contractDate, "Implied Volatility")
+        if iv < 0.05:
+            price = self.get_option_price(symbol, right, strike, contractDate)
+            days_to_expiry = (self.format_datetime(contractDate) - datetime.now()).days
+            iv = black_scholes.implied_volatility(price, self.get_price(), strike, days_to_expiry/365, self.get_rate(), right)
+        return iv
 
     def get_option_price(self, symbol: str, right: str, strike: float, contractDate: str) -> float:
         option = self.get_option_chain_row(symbol, right, strike, contractDate)
@@ -182,15 +189,11 @@ class Asset:
         d = datetime.now()
         d = d.replace(year = d.year - 1)
 
-        print(dividends)
-        print(d)
-
         dividends_last_year = dividends[dividends.index.to_pydatetime() > d]
 
         if len(dividends_last_year) == 0:
             return 0
 
-        print(dividends_last_year)
         recent_dividend = dividends_last_year.iloc[-1]["dividend"]
 
         return recent_dividend * len(dividends_last_year) / self.get_price()
@@ -205,6 +208,7 @@ class Asset:
 
         return float(table["Forward Dividend & Yield"].split("(")[1].split("%")[0])/100
     
+    # TODO move to utils.format or something
     def format_date(self, year: int, month: int, day: int) -> str:
             output = str(year)
             m = str(month)
@@ -218,18 +222,29 @@ class Asset:
 
             return output
     
-    # input net debt per share and price per share
-    def get_option(self, nd, price):
-        if nd > price:
-            nd = price * 0.9
+    # TODO move to utils.format or something
+    def format_datetime(self, date: str) -> datetime:
+        return datetime(year = int(date[0:4]), month = int(date[4:6]), day = int(date[6:8]))
+    
+    def get_strike(self, target_strike, strikes):
+        max_itr_strike = 100
+        j = 0
+        result_strike = None
+        while j < max_itr_strike:
+            strike_check = [target_strike - 0.5 * j, target_strike + 0.5 * j]
+            for strike in strike_check:
+                if strike in strikes:
+                    result_strike = strike
+                    j = max_itr_strike
+                    break
+            j += 1
 
-        d = datetime.now()
-        target_expiry = d + relativedelta(months = 6)
-        target_strike = math.floor(nd)
+        return result_strike
 
+    def get_target_option(self, target_expiry, target_strike):
+        result_expiry, result_strike = None, None
         max_itr_days = 100
         i = 0
-        option = None
         while i < max_itr_days:
             date_prev = target_expiry + relativedelta(days = i)
             date_prev = self.format_date(year = date_prev.year, month = date_prev.month, day = date_prev.day)
@@ -242,20 +257,9 @@ class Asset:
                     calls = op.get_options_chain(self.ticker, expiry)["calls"]
                     strikes = calls["Strike"].values
 
-                    max_itr_strike = 100
-                    j = 0
-                    while j < max_itr_strike:
-                        strike_check = [target_strike - 0.5 * j, target_strike + 0.5 * j]
-                        for strike in strike_check:
-                            if strike in strikes:
-                                target_strike = strike
-                                j = max_itr_strike
-                                break
-                        j += 1
+                    result_strike = self.get_strike(target_strike, strikes)
+                    result_expiry = expiry
 
-                    print(target_expiry, target_strike)
-
-                    target_expiry = expiry
                     i = max_itr_days
                     break
 
@@ -263,11 +267,108 @@ class Asset:
                     pass
 
             i += 1
+        
+        return result_expiry, result_strike
+    
+    def get_rate(self):
+        return yf.Ticker("^IRX").info["open"]/100
+    
+    # input net debt per share and price per share
+    def get_option(self, nd, price):
+        if nd > price:
+            nd = price * 0.9
 
-        print(target_expiry, target_strike)
+        d = datetime.now()
+        target_expiry = d + relativedelta(months = 6)
+        target_strike = math.floor(nd)
 
-                
+        result_expiry, result_strike = self.get_target_option(target_expiry, target_strike)
 
+        if result_expiry is None or result_strike is None:
+            return option.Option()
+
+        iv = self.get_option_iv(
+            symbol = self.ticker,
+            right = "C",
+            strike = result_strike,
+            contractDate = result_expiry
+        )
+
+        rate = self.get_rate()
+        days_to_expiry = (self.format_datetime(result_expiry) - datetime.now()).days
+
+        option_price, delta, gamma, vega, rho, theta = black_scholes.get_price_and_greeks(
+            S = price,
+            K = result_strike,
+            T = days_to_expiry/365,
+            r = rate,
+            iv = iv,
+            right = "C"
+        )
+
+        op = option.Option(
+            ticker = self.ticker,
+            right = "C",
+            stock_price = price,
+            strike = result_strike,
+            expiry = result_expiry,
+            rate = rate,
+            iv = iv,
+            option_price = option_price,
+            delta = delta,
+            gamma = gamma, 
+            vega = vega,
+            rho = rho, 
+            theta = theta
+        )
+
+        return op
+    
+    # TODO refactor
+    def option_dividend_return(self, days_to_expiry) -> float:
+        # get dividends over the last year
+        # common: 4, 12 process as such else weird and flag and handle later
+        dividends = si.get_dividends(self.ticker)
+
+        if len(dividends) == 0:
+            return 0
+
+        d = datetime.now()
+        d = d.replace(year = d.year - 1)
+
+        dividends_last_year = dividends[dividends.index.to_pydatetime() > d]
+
+        if len(dividends_last_year) == 0:
+            return 0
+
+        dividend_days = 365/len(dividends_last_year)
+        days_since_last_dividend = (datetime.now() - dividends_last_year.index.to_pydatetime()[-1]).days
+        days_to_next_dividend = dividend_days - days_since_last_dividend
+
+        if days_to_expiry < days_to_next_dividend:
+            return 0
+        
+        dividend_count = (days_to_expiry - days_to_next_dividend) // dividend_days + 1
+        recent_dividend = dividends_last_year.iloc[-1]["dividend"]
+
+        return recent_dividend * dividend_count
+    
+    def get_option_annualized(self, option: option.Option):
+
+        expiry_days = (self.format_datetime(option.expiry) - datetime.now()).days
+        dividend_return = self.option_dividend_return(expiry_days)
+        
+        call = option.option_price
+        stock = option.stock_price
+        strike = option.strike
+        
+        call_return = call + strike - stock
+        total_return = call_return + dividend_return
+        cost_base = stock - call
+
+        annualized = (1 + total_return/cost_base) ** (365/expiry_days) - 1
+        
+        return annualized
                 
 
             
