@@ -23,7 +23,7 @@ class DataDAO:
         # self.currency_data = self.data_processor.read_data("CURRENCY DIRECTORY")
 
     def get_exchange_rate(self, numerator, denominator):
-        self.currency_data[numerator] / self.currency_data[denominator]
+        return self.currency_data[numerator] / self.currency_data[denominator]
 
     def get_financials_exchange_rate(self, ticker):
         trade_currency = self.stock_data[ticker]["info"]["currency"]
@@ -31,7 +31,10 @@ class DataDAO:
         return self.get_exchange_rate(financials_currency, trade_currency)
 
     def get_stock_price(self, ticker):
-        return self.stock_data[ticker]["info"]["currentPrice"]
+        info = self.stock_data[ticker]["info"]
+        if info["quoteType"] == "ETF":
+            return (info["ask"] - info["bid"])/2 + info["bid"]
+        return info["currentPrice"]
     
     def get_share_issued(self, ticker):
         return self.stock_data[ticker]["balancesheet"].loc["Share Issued"].iloc[0]
@@ -190,6 +193,24 @@ class DataDAO:
         recent_dividend = dividends_last_year.iloc[-1]["dividend"]
 
         return recent_dividend * dividend_count
+    
+    # TODO refactor option expected return
+    def get_option_annualized(self, option: Option):
+
+        expiry_days = (utils.format_datetime(option.expiry) - datetime.now()).days
+        dividend_return = self.get_option_dividend_return(option.ticker, expiry_days)
+        
+        call = option.option_price
+        stock = option.stock_price
+        strike = option.strike
+        
+        call_return = call + strike - stock
+        total_return = call_return + dividend_return
+        cost_base = stock - call
+
+        annualized = (1 + total_return/cost_base) ** (365/expiry_days) - 1
+        
+        return annualized
 
 # d = DataDAO(DataProcessor())
 # for ticker, financials in d.stock_data.items():

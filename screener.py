@@ -107,23 +107,6 @@ class Screener:
             
         return qualified 
     
-    def get_option_annualized(self, option: src.option.Option):
-
-        expiry_days = (utils.format_datetime(option.expiry) - datetime.now()).days
-        dividend_return = self.data_dao.get_option_dividend_return(option.ticker, expiry_days)
-        
-        call = option.option_price
-        stock = option.stock_price
-        strike = option.strike
-        
-        call_return = call + strike - stock
-        total_return = call_return + dividend_return
-        cost_base = stock - call
-
-        annualized = (1 + total_return/cost_base) ** (365/expiry_days) - 1
-        
-        return annualized
-    
     # TODO move to data formats file (which will become output for dashboard)
     # ex options_annualized
     def option_strategy_data(self):
@@ -133,7 +116,7 @@ class Screener:
             try:
                 ticker = option.ticker
                 print(f"ticker: {ticker}")
-                annualized = self.get_option_annualized(option)
+                annualized = self.data_dao.get_option_annualized(option)
                 print(f"annualized: {annualized}")
                 beta = self.data_dao.get_beta(ticker)
                 risk_free_rate = self.data_dao.interest_rate

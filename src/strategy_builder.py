@@ -1,7 +1,9 @@
-from collections import defaultdict
 from ib_insync import Position
 from data_dao import DataDAO
-from src.covered_call_strategy import CoveredCall
+from src.strategies.covered_call_strategy import CoveredCallStrategy
+from src.strategies.etf_strategy import ETFStrategy
+from src.strategies.put_strategy import PutStrategy
+from src.strategies.stock_strategy import StockStrategy
 
 
 class StrategyBuilder:
@@ -28,8 +30,22 @@ class StrategyBuilder:
             counter[contract_string][1] = i
 
         if (counter["Stock"][0] == 1
+            and counter["Call"][0] == 0
+            and counter["Put"][0] == 0):
+            ticker = self.position_list[0].contract.symbol
+            if ticker in self.data_dao.stock_data and self.data_dao.stock_data[ticker]["info"]["quoteType"] == "ETF":
+                return ETFStrategy(self.position_list, counter, self.data_dao)
+            else:
+                return StockStrategy(self.position_list, counter, self.data_dao)
+        
+        elif (counter["Stock"][0] == 1
             and counter["Call"][0] == 1
             and counter["Put"][0] == 0):
-           return CoveredCall(self.position_list, counter, self.data_dao)
+           return CoveredCallStrategy(self.position_list, counter, self.data_dao)
+        
+        elif (counter["Stock"][0] == 0
+            and counter["Call"][0] == 0
+            and counter["Put"][0] == 1):
+           return PutStrategy(self.position_list, counter, self.data_dao)
         # .... more strategies ....
         pass

@@ -1,8 +1,8 @@
 from ib_insync import *
+from data_dao import DataDAO
+from data_processor import DataProcessor
 
-from src.option_position import OptionPosition
-from src.stock_position import StockPosition
-from src.strategy_congregator import StrategyCongregator
+from src.portfolio import Portfolio
 
 
 ib = IB()
@@ -13,34 +13,35 @@ account_list = ib.managedAccounts()
 
 # asset_position = AssetPosition(ib)
 
-strategy_congregator = StrategyCongregator()
+data_processor = DataProcessor()
+data_dao = DataDAO(data_processor)
+
+portfolio = Portfolio(data_dao)
 
 for account in account_list:
-    # position_list = ib.positions(account)
-    position_list = ib.positions("U5732481")
+    position_list = ib.positions(account)
 
     for position in position_list:
         # TODO add futures to strategy -> could just handle futures completely separately -> all we need is total USD portfolio
-        # TODO figure out how to handle CGX
+        # TODO figure out how to handle CGX -> Options chain doesn't show on yahoo finance
         if position.contract.symbol != "CGX" and not isinstance(position.contract, Future):
-            print(position)
+            portfolio.add_strategy(position)
 
-            if isinstance(position.contract, Option):
-                strategy_congregator.add_option(OptionPosition(ib, position))
-            else:
-                strategy_congregator.add_stock(StockPosition(ib, position))
+portfolio.build_strategies()
 
+print(portfolio)
 
-print(strategy_congregator)
-
-strategy_congregator.print_core()
+portfolio.print_core()
 
 
 # TODO serialize congregator -> use json
 
 # TODO
-# Better option model
-# DCF: More years financial data
+# Manually add tickers to tickers and new_stock_data.pkl -> add canada tickers to tickers -> update tickers
+# Manually add data to new_stock_data.pkl -> add cgx option manually
+# Better option pricing and greeks model
+# Scanner: search high intrinsic value high cashflow and high standard deviation -> slow because of yahoo finance web scrape call -> run every day after market close and use that number as share price -> how to run schedule?
+# DCF: -> DCF is expected return, stdev of cashflows last 5 years is risk -> Where to get more years financial data?
 # Analyze options chain: compare delta and return -> when to do 0.75 delta vs 0.9? When to choose longer date vs shorter? Risk and Liquidity
 # Notify when to update futures and quantity: future expiry date, total currency amount (non cad)
 # Notify when to roll: delta < 0.6? -> do some analysis
