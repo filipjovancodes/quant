@@ -12,12 +12,12 @@ from src.option import Option
 class DataProcessor:
     def __init__(self):
         self.tickers = None
-        self.data = {}
+        self.stock_data = {}
         self.currency_data = {}
         self.initialize()
     
     def initialize(self):
-        self.organize_tickers()
+        self.organize_tickers("data/tickers/tickers.csv")
         self.tickers = self.get_symbols("data/tickers/tickers.csv")
         self.currencies = self.get_symbols("data/currency/currency.csv")
 
@@ -36,15 +36,14 @@ class DataProcessor:
         return result[0]
     
     def get_symbols(self, file_path):
-        file = open(file_path)
-        csvreader = csv.reader(file)
-
-        return [row[0] for row in csvreader]
+        with open(file_path, 'r', encoding="utf-8") as file:
+            csvreader = csv.reader(file)
+            return [row[0] for row in csvreader]
     
     def write_data(self, data, file_path):
         encoded = jsonpickle.encode(data)
-        file = open(file_path, 'w', encoding="utf-8")
-        file.write(encoded)
+        with open(file_path, 'w', encoding="utf-8") as file:
+            file.write(encoded)
     
     def write_currency_data(self, file_path):
         for currency in self.currencies:
@@ -58,47 +57,52 @@ class DataProcessor:
 
         self.write_data(self.currency_data, file_path)
 
-    def write_stock_data(self, file_path):
-        callable_list = ["info", "financials", "balancesheet", "cashflow", "dividends", "options", "option_chain"]
-        total_time, count, length = 0, 0, len(self.tickers)
-        for ticker_str in self.tickers:
-            t1 = datetime.now()
+    def update_stock_data(self, ticker_str):
+        self.stock_data[ticker_str] = {}
+        for method in ["info", "financials", "balancesheet", "cashflow", "dividends", "options", "option_chain"]:
+            self.stock_data[ticker_str][method] = None
+            try:
+                ticker = yf.Ticker(ticker_str)
+                data = getattr(ticker, method)
 
+                # Serialization/deserialization doesn't work for calls/puts without converting to/from dict
+                if method == "option_chain":
+                    option_dates = self.stock_data[ticker_str]["options"]
+                    expiry_index = self.get_expiry_from_target_days(option_dates, 180)
+                    expiry = option_dates[expiry_index]
+                    data = ticker.option_chain(expiry) # date = expiry
+                    option_chain = {}
+                    option_chain["calls"] = data.calls.to_dict()
+                    option_chain["puts"] = data.puts.to_dict()
+                    data = option_chain
+                    self.stock_data[ticker_str]["option_chain_date"] = expiry
+
+                self.stock_data[ticker_str][method] = data
+            except:
+                print(f"Error calling {method}")
+
+    def write_stock_data(self, file_path, tickers_input = None):
+        tickers_to_use = self.tickers
+        if tickers_input is not None:
+            tickers_to_use = tickers_input
+
+        total_time, count, length = 0, 0, len(tickers_to_use)
+        for ticker_str in tickers_to_use:
+            t1 = datetime.now()
             print(f"Fetching data for ticker: {ticker_str}")
 
-            self.data[ticker_str] = {}
-            for method in callable_list:
-                self.data[ticker_str][method] = None
-                try:
-                    ticker = yf.Ticker(ticker_str)
-                    data = getattr(ticker, method)
-
-                    # Serialization/deserialization doesn't work for calls/puts without converting to/from dict
-                    if method == "option_chain":
-                        option_dates = self.data[ticker_str]["options"]
-                        expiry_index = self.get_expiry_from_target_days(option_dates, 180)
-                        expiry = option_dates[expiry_index]
-                        data = ticker.option_chain(expiry) # date = expiry
-                        option_chain = {}
-                        option_chain["calls"] = data.calls.to_dict()
-                        option_chain["puts"] = data.puts.to_dict()
-                        data = option_chain
-                        self.data[ticker_str]["option_chain_date"] = expiry
-
-                    self.data[ticker_str][method] = data
-                except:
-                    print(f"Error calling {method}")
+            self.update_stock_data(ticker_str)
 
             t2 = datetime.now()
             total_time += (t2-t1).microseconds
             count += 1
             print(f"Took {(t2-t1).microseconds} microseconds to fetch {ticker_str} || Average: {total_time/count} || Total: {total_time} || Count: {count} || Estimated time remaining (m) {(length - count) * total_time/count / 1000000 / 60}")
 
-        self.write_data(self.data, file_path)
+        self.write_data(self.stock_data, file_path)
     
     def read_stock_data(self, file_path):
-        file = open(file_path, 'r', encoding="utf-8")
-        file_json = file.read()
+        with open(file_path, 'r', encoding="utf-8") as file:
+            file_json = file.read()
         decoded = jsonpickle.decode(file_json)
 
         for key, val in decoded.items():
@@ -111,17 +115,39 @@ class DataProcessor:
         return decoded
     
     def read_data(self, file_path):
-        file = open(file_path, 'r', encoding="utf-8")
-        file_json = file.read()
+        with open(file_path, 'r', encoding="utf-8") as file:
+            file_json = file.read()
         return jsonpickle.decode(file_json)
     
-    def organize_tickers(self):
+    def update_stock_data_file(self, file_path, tickers_input = None):
+        tickers_to_use = self.tickers
+        if tickers_input is not None:
+            tickers_to_use = tickers_input
+
+        self.stock_data = self.read_data(file_path)
+
+        total_time, count, length = 0, 0, len(tickers_to_use)
+
+        for ticker_str in tickers_to_use:
+            t1 = datetime.now()
+            print(f"Fetching data for ticker: {ticker_str}")
+
+            self.update_stock_data(ticker_str)
+
+            t2 = datetime.now()
+            total_time += (t2-t1).microseconds
+            count += 1
+            print(f"Took {(t2-t1).microseconds} microseconds to fetch {ticker_str} || Average: {total_time/count} || Total: {total_time} || Count: {count} || Estimated time remaining (m) {(length - count) * total_time/count / 1000000 / 60}")
+
+        self.write_data(self.stock_data, file_path)
+    
+    def organize_tickers(self, file_path):
         tickers = set()
         directory = "data/raw"
         for file_name in os.listdir(directory):
-            file_path = os.path.join(directory, file_name)
+            data_file_path = os.path.join(directory, file_name)
 
-            with open(file_path) as file:
+            with open(data_file_path, 'r', encoding="utf-8") as file:
                 csvreader = csv.reader(file)
                 next(csvreader)
                 
@@ -132,7 +158,7 @@ class DataProcessor:
         for ticker in tickers:
             tickers_input.append([ticker])
         
-        with open("data/tickers/tickers.csv", "w") as file:
+        with open(file_path, 'w', encoding="utf-8") as file:
             csvwriter = csv.writer(file)
             csvwriter.writerows(tickers_input)
 
@@ -142,6 +168,17 @@ class DataProcessor:
 # data = dp.read_data('data/core/new_stock_data.pkl')
 # dp.write_currency_data("data/core/currency_data.pkl")
 # print(dp.read_currency_data("data/core/currency_data.pkl"))
+
+
+# tickers = ["ABNB", "SXP.TO", "MRG-UN.TO", "APR-UN.TO", "RET-A.V"]
+# dp.write_stock_data('data/core/test.pkl', tickers)
+# dp.update_stock_data_file("data/core/new_stock_data.pkl", tickers)
+
+# dp = DataProcessor()
+# data = dp.read_stock_data("data/core/new_stock_data.pkl")
+
+# print(data["DHT"])
+# print(data["RET-A.V"])
 
 # print(data["UMC"])
 

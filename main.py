@@ -37,6 +37,7 @@ portfolio.print_core()
 # TODO serialize congregator -> use json
 
 # TODO
+# Analyze portfolio exposure by sector/industry
 # Manually add tickers to tickers and new_stock_data.pkl -> add canada tickers to tickers -> update tickers
 # Manually add data to new_stock_data.pkl -> add cgx option manually
 # Better option pricing and greeks model
