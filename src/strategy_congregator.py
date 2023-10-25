@@ -6,7 +6,7 @@ from src.stock_position import StockPosition
 # TODO figure out how to handle positions in multiple accounts -> TLT in TFSA and Margin
 # TODO figure out why same account positions repeat some time -> SPY twice
 # TODO more accurate option pricing rather than just pulling from yahoo finance
-# TODO MCD, M6B, AEP, CGX pricing
+# TODO MCD, M6B, CGX pricing
 class StrategyCongregator:
     def __init__(self):
         self.strategies = {} # {str : Strategy}

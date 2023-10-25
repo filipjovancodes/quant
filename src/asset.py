@@ -227,11 +227,12 @@ class Asset:
         return datetime(year = int(date[0:4]), month = int(date[4:6]), day = int(date[6:8]))
     
     def get_strike(self, target_strike, strikes):
+        target_strike = math.floor(target_strike)
         max_itr_strike = 100
         j = 0
         result_strike = None
         while j < max_itr_strike:
-            strike_check = [target_strike - 0.5 * j, target_strike + 0.5 * j]
+            strike_check = [target_strike - 0.25 * j, target_strike + 0.25 * j]
             for strike in strike_check:
                 if strike in strikes:
                     result_strike = strike

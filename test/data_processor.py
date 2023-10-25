@@ -6,7 +6,6 @@ import jsonpickle
 import pandas as pd
 import yfinance as yf
 import utils.yf_utils as yf_utils
-from src.option import Option
 
 
 class DataProcessor:

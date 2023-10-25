@@ -1,40 +1,20 @@
 import csv
+import traceback
 
-import yfinance as yf
+import pandas
+from data_dao import DataDAO
+from data_processor import DataProcessor
+
 import src.option
 from datetime import datetime
-from yahoo_fin import stock_info as si
-from src.asset import Asset
-from src.asset_position import AssetPosition
+import utils.utils as utils
 
 class Screener:
-    def __init__(self, data_path):
-        self.data_path = data_path
-
-    def get_tickers(self):
-        file = open(self.data_path)
-        csvreader = csv.reader(file)
-        next(csvreader)
-
-        return [row[0] for row in csvreader]
-    
-    # TODO move to format file
-    def format_date(self, year: int, month: int, day: int) -> str:
-        output = str(year)
-        m = str(month)
-        if len(m) == 1:
-            m = "0" + m
-        output += m
-        d = str(day)
-        if len(d) == 1:
-            d = "0" + d
-        output += d
-
-        return output
+    def __init__(self, data_dao: DataDAO):
+        self.data_dao = data_dao
     
     def write_file(self, qualified, name):
-        today = datetime.now()
-        today_formatted = self.format_date(today.year, today.month, today.day)
+        today_formatted = utils.format_date(datetime.now())
         header = ["ticker", "price", "share_issued", "mcap", "nd", \
                     "cf", "pe", "ticker", "right", "stock_price", "strike", \
                     "expiry", "rate", "iv", "option_price", "delta", \
@@ -56,31 +36,12 @@ class Screener:
             writer.writerows(stock_data)
 
     def write_option_data(self, option_data):
-        header = ["Ticker","Right","Stock Price","Strike","Expiry Date",\
-                  "Interest Rate","Implied Volatility","Option Price",\
-                    "Delta","Gamma","Vega","Rho","Theta"]
-        with open(f"data/core/option_data.csv", "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-            writer.writerows(option_data)
+        self.data_dao.data_processor.write_data(option_data, "data/core/option_data.pkl")
 
     def flush_data(self, qualified, stock_data, option_data, name):
         self.write_stock_data(stock_data)
         self.write_option_data(option_data)
         self.write_file(qualified, name)
-
-    # TODO from ticker csv put this into a csv with all data used for screener
-    def get_core(self, a: Asset):
-        share_issued = a.get_share_issued()
-        price = a.get_price()
-        mcap = price * share_issued
-
-        nd = a.get_net_debt()
-        cf = a.get_cash_flow_avg()
-        pe = a.get_pe()
-        intrinsic = a.get_intrinsic_value()
-
-        return share_issued, price, mcap, nd, cf, pe, intrinsic
 
     # def screen_liquidation_value(self):
     #     tickers = self.get_tickers()
@@ -107,68 +68,89 @@ class Screener:
     #     self.flush_data(qualified, stock_data, option_data, "liquidation_value")
             
     #     return qualified 
+
+    def get_intrinsic_value(self, cashflow, net_debt, stock_price, share_issued):
+        valuation = cashflow * 10
+        lv = net_debt + valuation
+
+        mcap = stock_price * share_issued
+        share_iv = lv / mcap * stock_price
+
+        return share_iv
     
     def screen_intrinsic_value(self):
-        tickers = self.get_tickers()
         qualified, stock_data, option_data = [], [], []
-        for ticker in tickers:
-            try: 
-                a = Asset(ticker)
-                share_issued, price, mcap, nd, cf, pe, intrinsic = self.get_core(a)
+        for ticker in self.data_dao.tickers:
+            try:
+                share_issued = self.data_dao.get_share_issued(ticker)
+                stock_price = self.data_dao.get_stock_price(ticker)
+                mcap = share_issued * stock_price
+                net_debt = self.data_dao.get_net_debt(ticker)
+                cashflow = self.data_dao.get_cashflow_avg(ticker)
+                pe = self.data_dao.get_pe(ticker)
+                intrinsic = self.get_intrinsic_value(cashflow, net_debt, stock_price, share_issued)
 
-                stock_data.append([ticker, price, share_issued, mcap, nd, cf, pe, intrinsic])
+                stock_data.append([ticker, stock_price, share_issued, mcap, net_debt, cashflow, pe, intrinsic])
                 
-                if nd / mcap > 0.3 and cf / mcap > 0.1 and pe < 10 and intrinsic / price > 1:
+                if net_debt / mcap > 0.3 and cashflow / mcap > 0.1 and pe < 10 and intrinsic / stock_price > 1:
                     print(f"Qualified {ticker}")
-
-                    option = a.get_option(nd, price)
-
-                    data = [ticker, price, share_issued, mcap, nd, cf, pe, intrinsic] + option.to_list()
-                    qualified.append(data)
-                    print(data)
-                    option_data.append(option.to_list())
-            except: 
-                continue
+                    option = self.data_dao.get_option(ticker, net_debt, stock_price)
+                    print(option)
+                    option_data.append(option)
+                    qualified.append(stock_data[-1] + option_data[-1].to_list())
+            except Exception as error:
+                if not type(error) == KeyError:
+                    print(traceback.format_exc())
+                # print(error)
 
         self.flush_data(qualified, stock_data, option_data, "intrinsic_value")
             
         return qualified 
-
     
-    def read_option(self, file_path) -> list[src.option.Option]:
-        header = ["ticker", "price", "share_issued", "mcap", "nd", "cf", "pe", "intrinsic", "ticker", "right", "stock_price", "strike", "expiry", "rate", "iv", "option_price", "delta", "gamma", "vega", "rho", "theta"]
+    def get_option_annualized(self, option: src.option.Option):
 
-        options = []
-        with open(file_path) as file:
-            csvreader = csv.reader(file, delimiter = ",")
-            next(csvreader)
+        expiry_days = (utils.format_datetime(option.expiry) - datetime.now()).days
+        dividend_return = self.data_dao.get_option_dividend_return(option.ticker, expiry_days)
+        
+        call = option.option_price
+        stock = option.stock_price
+        strike = option.strike
+        
+        call_return = call + strike - stock
+        total_return = call_return + dividend_return
+        cost_base = stock - call
 
-            for row in csvreader:
-                print(row)
-                if row[8] != "":
-                    options.append(src.option.Option(
-                            row[8],
-                            row[9],
-                            float(row[10]),
-                            float(row[11]),
-                            row[12],
-                            float(row[13]),
-                            float(row[14]),
-                            float(row[15]),
-                            float(row[16]),
-                            float(row[17]),
-                            float(row[18]),
-                            float(row[19]),
-                            float(row[20])
-                        )
-                    )
+        annualized = (1 + total_return/cost_base) ** (365/expiry_days) - 1
+        
+        return annualized
+    
+    # TODO move to data formats file (which will become output for dashboard)
+    # ex options_annualized
+    def option_strategy_data(self):
+        options: list[src.option.Option] = self.data_dao.data_processor.read_data("data/core/option_data.pkl")
 
-        return options
+        for option in options:
+            try:
+                ticker = option.ticker
+                print(f"ticker: {ticker}")
+                annualized = self.get_option_annualized(option)
+                print(f"annualized: {annualized}")
+                beta = self.data_dao.get_beta(ticker)
+                risk_free_rate = self.data_dao.interest_rate
+                market_rate = 0.1
+                alpha = annualized - risk_free_rate - beta * (market_rate - risk_free_rate)
+                print(f"beta: {beta}")
+                print(f"alpha: {alpha}")
+                print(f"sector: {self.data_dao.stock_data[ticker]['info']['sector']}")
+                print(f"industry: {self.data_dao.stock_data[ticker]['info']['industry']}\n")
+            except:
+                print(traceback.format_exc())
             
     
-# screener = Screener("data/tickers/tickers.csv")
+screener = Screener(DataDAO(DataProcessor()))
 # screener.screen_liquidation_value()
 # screener.screen_intrinsic_value()
+screener.option_strategy_data()
 
 
     
