@@ -98,6 +98,9 @@ class DataProcessor:
             count += 1
             print(f"Took {(t2-t1).microseconds} microseconds to fetch {ticker_str} || Average: {total_time/count} || Total: {total_time} || Count: {count} || Estimated time remaining (m) {(length - count) * total_time/count / 1000000 / 60}")
 
+            individual_stock_file_path = f"data/stock_data/{ticker_str}.pkl"
+            self.write_data(self.stock_data[ticker_str], individual_stock_file_path)
+
         self.write_data(self.stock_data, file_path)
     
     def read_stock_data(self, file_path):
@@ -110,6 +113,22 @@ class DataProcessor:
                 decoded[key]["option_chain"]["calls"] = pd.DataFrame.from_dict(decoded[key]["option_chain"]["calls"])
                 decoded[key]["option_chain"]["puts"] = pd.DataFrame.from_dict(decoded[key]["option_chain"]["puts"])
             except:
+                print("Error decoding options chain")
+                continue
+
+        return decoded
+    
+    def read_individual_stock_data(self, file_path):
+        with open(file_path, 'r', encoding="utf-8") as file:
+            file_json = file.read()
+        decoded = jsonpickle.decode(file_json)
+
+        for key, val in decoded.items():
+            try:
+                decoded["option_chain"]["calls"] = pd.DataFrame.from_dict(decoded["option_chain"]["calls"])
+                decoded["option_chain"]["puts"] = pd.DataFrame.from_dict(decoded["option_chain"]["puts"])
+            except:
+                print("Error decoding options chain")
                 continue
 
         return decoded
@@ -162,13 +181,15 @@ class DataProcessor:
             csvwriter = csv.writer(file)
             csvwriter.writerows(tickers_input)
 
-# dp = DataProcessor()
+dp = DataProcessor()
 # dp.options_annualized("data/intrinsic_value/20231017.csv")
-# dp.write_data('data/core/new_stock_data.pkl')
+# dp.write_stock_data('data/core/new_stock_data.pkl')
 # data = dp.read_data('data/core/new_stock_data.pkl')
 # dp.write_currency_data("data/core/currency_data.pkl")
 # print(dp.read_currency_data("data/core/currency_data.pkl"))
 
+ticker_str = "FRT"
+print(dp.read_individual_stock_data(f"data/stock_data/{ticker_str}.pkl"))
 
 # tickers = ["ABNB", "SXP.TO", "MRG-UN.TO", "APR-UN.TO", "RET-A.V"]
 # dp.write_stock_data('data/core/test.pkl', tickers)

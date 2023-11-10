@@ -130,10 +130,10 @@ class Screener:
                 print(traceback.format_exc())
             
     
-screener = Screener(DataDAO(DataProcessor()))
+# screener = Screener(DataDAO(DataProcessor()))
 # screener.screen_liquidation_value()
 # screener.screen_intrinsic_value()
-screener.option_strategy_data()
+# screener.option_strategy_data()
 
 
     
