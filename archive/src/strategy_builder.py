@@ -1,4 +1,4 @@
-from ib_insync import Position
+from ib_insync import IB, Position
 from data_dao import DataDAO
 from src.strategies.covered_call_strategy import CoveredCallStrategy
 from src.strategies.etf_strategy import ETFStrategy
@@ -7,7 +7,8 @@ from src.strategies.stock_strategy import StockStrategy
 
 
 class StrategyBuilder:
-    def __init__(self, data_dao: DataDAO):
+    def __init__(self, ib: IB, data_dao: DataDAO):
+        self.ib = ib
         self.data_dao = data_dao
         self.position_list = []
 
@@ -34,18 +35,18 @@ class StrategyBuilder:
             and counter["Put"][0] == 0):
             ticker = self.position_list[0].contract.symbol
             if ticker in self.data_dao.stock_data and self.data_dao.stock_data[ticker]["info"]["quoteType"] == "ETF":
-                return ETFStrategy(self.position_list, counter, self.data_dao)
+                return ETFStrategy(self.position_list, counter, self.data_dao, self.ib)
             else:
-                return StockStrategy(self.position_list, counter, self.data_dao)
+                return StockStrategy(self.position_list, counter, self.data_dao, self.ib)
         
         elif (counter["Stock"][0] == 1
             and counter["Call"][0] == 1
             and counter["Put"][0] == 0):
-           return CoveredCallStrategy(self.position_list, counter, self.data_dao)
+           return CoveredCallStrategy(self.position_list, counter, self.data_dao, self.ib)
         
         elif (counter["Stock"][0] == 0
             and counter["Call"][0] == 0
             and counter["Put"][0] == 1):
-           return PutStrategy(self.position_list, counter, self.data_dao)
+           return PutStrategy(self.position_list, counter, self.data_dao, self.ib)
         # .... more strategies ....
         pass

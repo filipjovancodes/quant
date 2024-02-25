@@ -1,101 +1,82 @@
-from datetime import datetime
-import math
-import pandas as pd
-from yahoo_fin import stock_info as si
-from yahoo_fin import options as op
-import yfinance as yf
-from dateutil.relativedelta import relativedelta
-
-import csv
-
-from src.asset import Asset
-
-symbol = "AAPL"
 
 
+from portfolio_dashboard import OptionChainDashboard
 
 
-a = Asset(symbol)
+option_chain_dashboard = OptionChainDashboard()
+option_chain_dashboard.run_server()
 
-div = a.get_dividend_yield_simple()
+# async def place_order(ib: IB, symbol):
+#     contract = Stock(symbol, "SMART", "USD")  # Define contract details
+#     # order = ...     # Define order details
+#     # orderId = await ib.placeOrderAsync(contract, order)
+#     data = await ib.reqTickersAsync(contract)  # Await the result of the async operation
+#     print(f"Data: {data}")
+
+# async def run():
+#     ib = IB()
+#     util.startLoop()
+#     await ib.connectAsync('127.0.0.1', 7496, clientId=1, readonly=True)  # Connect to IBKR TWS or IB Gateway
+
+#     # Execute async functions concurrently
+#     await asyncio.gather(
+#         place_order(ib, "AAPL"),  # Pass the coroutine object directly
+#         place_order(ib, "MSFT"),  # Pass the coroutine object directly
+#     )
+
+#     ib.disconnect()
+
+# if __name__ == "__main__":
+#     util.run(run())
+
+def test():
+
+    # Given inputs
+    days = 39
+    call = 1.9
+    stock = 23.87
+    strike = 22.5
+    dividend = 0.2
+    periods = 1
+    rfr = 0.047
+    required_return = rfr + 0.02
 
 
-# calls = op.get_options_chain(symbol, "20240419")["calls"]
-# strikes = calls["Strike"].values
-# nd_per_share = 123.44
-
-# print(strikes)
-
-# target_strike = math.floor(nd_per_share)
-# max_itr_strike = 100
-# j = 0
-# while j < max_itr_strike:
-#     strike_check = [target_strike - 0.5 * j, target_strike + 0.5 * j]
-#     for strike in strike_check:
-#         if strike in strikes:
-#             target_strike = strike
-#             j = max_itr_strike
-#             break
-#     j += 1
-
-# print(target_strike)
+    def calculate_annualized(put_price):
+        call_return = call + strike - stock
+        dividend_return = dividend * periods
+        call_return = call_return + dividend_return
+        net_return = call_return - put_price
+        cost_base = stock - call + put_price
+        annualized = (1 + net_return / cost_base) ** (365 / days) - 1
+        return -annualized  # Minimize negative annualized return
 
 
-def format_date(year: int, month: int, day: int) -> str:
-    output = str(year)
-    m = str(month)
-    if len(m) == 1:
-        m = "0" + m
-    output += m
-    d = str(day)
-    if len(d) == 1:
-        d = "0" + d
-    output += d
+    # Initial guess for put price
+    put_guess = 1.0
 
-    return output
+    # Bounds for put price (typically non-negative)
+    bounds = optimize.Bounds(0, float("inf"))
 
-nd_per_share = 123.34
 
-d = datetime.now()
-target_expiry = d + relativedelta(months = 6)
-target_strike = math.floor(nd_per_share)
+    # Constraint function
+    def constraint_function(put_price):
+        return calculate_annualized(put_price) + required_return
 
-max_itr_days = 100
-i = 0
-option = None
-while i < max_itr_days:
-    date_prev = target_expiry + relativedelta(days = i)
-    date_prev = format_date(year = date_prev.year, month = date_prev.month, day = date_prev.day)
-    date_next = target_expiry - relativedelta(days = i)
-    date_next = format_date(year = date_next.year, month = date_next.month, day = date_next.day)
-    expiries = [date_prev, date_next]
-    
-    for expiry in expiries:
-        try:
-            calls = op.get_options_chain(symbol, expiry)["calls"]
-            strikes = calls["Strike"].values
 
-            max_itr_strike = 100
-            j = 0
-            while j < max_itr_strike:
-                strike_check = [target_strike - 0.5 * j, target_strike + 0.5 * j]
-                for strike in strike_check:
-                    if strike in strikes:
-                        target_strike = strike
-                        j = max_itr_strike
-                        break
-                j += 1
+    # Constraint definition
+    constraints = {"type": "ineq", "fun": constraint_function}
 
-            print(target_expiry, target_strike)
+    # Optimization
+    result = optimize.minimize(
+        calculate_annualized, put_guess, bounds=bounds, constraints=constraints
+    )
 
-            target_expiry = expiry
-            i = max_itr_days
-            break
+    # Extract optimized put price
+    optimal_put_price = result.x[0]
 
-        except:
-            pass
+    # Calculate corresponding annualized return
+    optimal_annualized_return = -result.fun
 
-    i += 1
-
-print(target_expiry, target_strike)
-
+    print("Optimal Put Price:", optimal_put_price)
+    print("Corresponding Annualized Return:", optimal_annualized_return)

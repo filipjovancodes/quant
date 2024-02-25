@@ -1,10 +1,11 @@
-from ib_insync import Position
+from ib_insync import IB, Position
 from src.strategy import Strategy
 from data_dao import DataDAO
 
 
 class StockStrategy(Strategy):
-    def __init__(self, position_list: list[Position], position_map: {}, data_dao: DataDAO):
+    def __init__(self, position_list: list[Position], position_map: {}, data_dao: DataDAO, ib: IB):
+        self.ib = ib
         self.position_list = position_list
         self.data_dao = data_dao
         self.stock = position_list[position_map["Stock"][1]]

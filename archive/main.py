@@ -1,10 +1,19 @@
 from ib_insync import *
-from data_dao import DataDAO
-from data_processor import DataProcessor
+from archive.data_dao import DataDAO
+from archive.data_processor import DataProcessor
 
 from src.portfolio import Portfolio
 
 
+def awaitGreeks(positions):
+    ready = False
+    while ready is False:
+        ready = True
+        for position in positions:
+            if isinstance(position.contract, Option) and position.contract.modelGreeks is None:
+                ready = False
+        ib.sleep(1)
+        
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=1, readonly=True)
 
@@ -13,20 +22,18 @@ account_list = ib.managedAccounts()
 
 # asset_position = AssetPosition(ib)
 
-data_processor = DataProcessor()
-data_dao = DataDAO(data_processor)
-
-portfolio = Portfolio(data_dao)
+portfolio = Portfolio(ib)
 
 for account in account_list:
     position_list = ib.positions(account)
 
     for position in position_list:
+        # TODO ib.reqTickers(contract) -> keep a reference that is accessible in data_dao
         # TODO add futures to strategy -> could just handle futures completely separately -> all we need is total USD portfolio
-        # TODO figure out how to handle CGX -> Options chain doesn't show on yahoo finance
-        if position.contract.symbol != "CGX" and not isinstance(position.contract, Future):
-            portfolio.add_strategy(position)
+        print(position)
+        portfolio.add_strategy(position)
 
+# awaitGreeks(position_list)
 portfolio.build_strategies()
 
 print(portfolio)

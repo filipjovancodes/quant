@@ -10,8 +10,8 @@ from datetime import datetime
 import utils.utils as utils
 
 class Screener:
-    def __init__(self, data_dao: DataDAO):
-        self.data_dao = data_dao
+    def __init__(self):
+        self.data_dao = DataDAO()
     
     def write_file(self, qualified, name):
         today_formatted = utils.format_date(datetime.now())
@@ -88,22 +88,84 @@ class Screener:
                 net_debt = self.data_dao.get_net_debt(ticker)
                 cashflow = self.data_dao.get_cashflow_avg(ticker)
                 pe = self.data_dao.get_pe(ticker)
+                eps = self.data_dao.get_eps(ticker)
                 intrinsic = self.get_intrinsic_value(cashflow, net_debt, stock_price, share_issued)
 
                 stock_data.append([ticker, stock_price, share_issued, mcap, net_debt, cashflow, pe, intrinsic])
                 
-                if net_debt / mcap > 0.3 and cashflow / mcap > 0.1 and pe < 10 and intrinsic / stock_price > 1:
+                if net_debt / mcap > 0.3 and cashflow / mcap > 0.1 and pe < 15 and intrinsic / stock_price > 1 and eps > 0:
                     print(f"Qualified {ticker}")
-                    option = self.data_dao.get_option(ticker, net_debt, stock_price)
-                    print(option)
-                    option_data.append(option)
-                    qualified.append(stock_data[-1] + option_data[-1].to_list())
+                    qualified.append(stock_data[-1])
+                    # option = self.data_dao.get_option(ticker, net_debt, stock_price)
+                    # print(option)
+                    # option_data.append(option)
+                    # qualified.append(stock_data[-1] + option_data[-1].to_list())
             except Exception as error:
-                if not type(error) == KeyError:
-                    print(traceback.format_exc())
-                # print(error)
+            #     if not type(error) == KeyError:
+            #         print(traceback.format_exc())
+                print(error)
 
-        self.flush_data(qualified, stock_data, option_data, "intrinsic_value")
+    def screen_intrinsic_value_last_year(self):
+        qualified, stock_data, option_data = [], [], []
+        for ticker in self.data_dao.tickers:
+            try:
+                er = self.data_dao.get_financials_exchange_rate(ticker)
+                share_issued = self.data_dao.get_share_issued(ticker)
+                stock_price = self.data_dao.get_stock_price(ticker)
+                mcap = share_issued * stock_price
+                net_debt = self.data_dao.get_net_debt(ticker) * er
+                cashflow = self.data_dao.get_cashflow_last_year(ticker) * er
+                pe = self.data_dao.get_pe(ticker)
+                eps = self.data_dao.get_eps(ticker)
+                intrinsic = self.get_intrinsic_value(cashflow, net_debt, stock_price, share_issued)
+
+                stock_data.append([ticker, stock_price, share_issued, mcap, net_debt, cashflow, pe, eps, intrinsic])
+                
+                if net_debt / mcap > 0.3 and cashflow / mcap > 0.1 and pe < 15 and intrinsic / stock_price > 1 and eps > 0:
+                    print(f"Qualified {ticker}")
+                    qualified.append(stock_data[-1])
+                    # option = self.data_dao.get_option(ticker, net_debt, stock_price)
+                    # print(option)
+                    # option_data.append(option)
+                    # qualified.append(stock_data[-1] + option_data[-1].to_list())
+            except Exception as error:
+            #     if not type(error) == KeyError:
+            #         print(traceback.format_exc())
+                print(error)
+
+        self.flush_data(qualified, stock_data, option_data, "intrinsic_value_last_year")
+            
+        return qualified 
+    
+    def screen_intrinsic_value_last_year_loose(self):
+        qualified, stock_data, option_data = [], [], []
+        for ticker in self.data_dao.tickers:
+            try:
+                er = self.data_dao.get_financials_exchange_rate(ticker)
+                share_issued = self.data_dao.get_share_issued(ticker)
+                stock_price = self.data_dao.get_stock_price(ticker)
+                mcap = share_issued * stock_price
+                net_debt = self.data_dao.get_net_debt(ticker) * er
+                cashflow = self.data_dao.get_cashflow_last_year(ticker) * er
+                pe = self.data_dao.get_pe(ticker)
+                eps = self.data_dao.get_eps(ticker)
+                intrinsic = self.get_intrinsic_value(cashflow, net_debt, stock_price, share_issued)
+
+                stock_data.append([ticker, stock_price, share_issued, mcap, net_debt, cashflow, pe, eps, intrinsic])
+
+                if net_debt / mcap > 0.3 and cashflow / mcap > 0.08 and pe < 20 and intrinsic / stock_price > 0.75 and eps > 0:
+                    print(f"Qualified {ticker}")
+                    qualified.append(stock_data[-1])
+                    # option = self.data_dao.get_option(ticker, net_debt, stock_price)
+                    # print(option)
+                    # option_data.append(option)
+                    # qualified.append(stock_data[-1] + option_data[-1].to_list())
+            except Exception as error:
+            #     if not type(error) == KeyError:
+            #         print(traceback.format_exc())
+                print(error)
+
+        self.flush_data(qualified, stock_data, option_data, "intrinsic_value_last_year")
             
         return qualified 
     
@@ -124,16 +186,18 @@ class Screener:
                 alpha = annualized - risk_free_rate - beta * (market_rate - risk_free_rate)
                 print(f"beta: {beta}")
                 print(f"alpha: {alpha}")
-                print(f"sector: {self.data_dao.stock_data[ticker]['info']['sector']}")
-                print(f"industry: {self.data_dao.stock_data[ticker]['info']['industry']}\n")
+                # print(f"sector: {self.data_dao.stock_data[ticker]['info']['sector']}")
+                # print(f"industry: {self.data_dao.stock_data[ticker]['info']['industry']}\n")
             except:
                 print(traceback.format_exc())
             
     
-# screener = Screener(DataDAO(DataProcessor()))
+screener = Screener()
 # screener.screen_liquidation_value()
 # screener.screen_intrinsic_value()
 # screener.option_strategy_data()
+# screener.screen_intrinsic_value_last_year()
+screener.screen_intrinsic_value_last_year_loose()
 
 
     

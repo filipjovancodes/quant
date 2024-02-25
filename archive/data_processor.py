@@ -1,12 +1,17 @@
+import asyncio
 from datetime import datetime
 import os
 import csv
+import threading
 import traceback
+import concurrent.futures
 import jsonpickle
 import pandas as pd
 import yfinance as yf
 import utils.yf_utils as yf_utils
 from src.option import Option
+import utils.utils as utils
+from ib_insync import util
 
 
 class DataProcessor:
@@ -14,12 +19,17 @@ class DataProcessor:
         self.tickers = None
         self.stock_data = {}
         self.currency_data = {}
-        self.initialize()
+        self._initialize()
     
-    def initialize(self):
+    def _initialize(self):
         self.organize_tickers("data/tickers/tickers.csv")
         self.tickers = self.get_symbols("data/tickers/tickers.csv")
         self.currencies = self.get_symbols("data/currency/currency.csv")
+
+    def update(self):
+        cur_date = datetime.now().strftime("%d%m%Y")
+        self.write_currency_data(f"data/core/currency_data_{cur_date}.pkl")
+        self.write_stock_data(f"data/core/new_stock_data{cur_date}.pkl")
 
     def get_expiry_from_target_days(self, valid_option_dates, target_days_to_expiry):
         if len(valid_option_dates) == 0:
@@ -41,8 +51,10 @@ class DataProcessor:
             return [row[0] for row in csvreader]
     
     def write_data(self, data, file_path):
+        today_formatted = utils.format_date(datetime.now())
+        new_file_path = f"{file_path}_{today_formatted}"
         encoded = jsonpickle.encode(data)
-        with open(file_path, 'w', encoding="utf-8") as file:
+        with open(new_file_path, 'w', encoding="utf-8") as file:
             file.write(encoded)
     
     def write_currency_data(self, file_path):
@@ -117,21 +129,26 @@ class DataProcessor:
                 continue
 
         return decoded
+
+    def read_stock_data_from_directory(self, directory_path):
+        for filename in os.listdir(directory_path):
+            file_path = os.path.join(directory_path, filename)
+            self.read_individual_stock_data(file_path)
+
+        return self.stock_data
     
     def read_individual_stock_data(self, file_path):
         with open(file_path, 'r', encoding="utf-8") as file:
             file_json = file.read()
-        decoded = jsonpickle.decode(file_json)
+            ticker = os.path.splitext(os.path.basename(file_path))[0]
 
-        for key, val in decoded.items():
+            decoded = jsonpickle.decode(file_json)
+            self.stock_data[ticker] = decoded
             try:
-                decoded["option_chain"]["calls"] = pd.DataFrame.from_dict(decoded["option_chain"]["calls"])
-                decoded["option_chain"]["puts"] = pd.DataFrame.from_dict(decoded["option_chain"]["puts"])
+                self.stock_data[ticker]["option_chain"]["calls"] = pd.DataFrame.from_dict(decoded["option_chain"]["calls"])
+                self.stock_data[ticker]["option_chain"]["puts"] = pd.DataFrame.from_dict(decoded["option_chain"]["puts"])
             except:
                 print("Error decoding options chain")
-                continue
-
-        return decoded
     
     def read_data(self, file_path):
         with open(file_path, 'r', encoding="utf-8") as file:
@@ -181,15 +198,47 @@ class DataProcessor:
             csvwriter = csv.writer(file)
             csvwriter.writerows(tickers_input)
 
-dp = DataProcessor()
+# dp = DataProcessor()
+# dp.write_stock_data("data/core/new_stock_data.pkl")
+
+
+
+# num_threads = 100
+
+# def get_symbols(file_path):
+#     with open(file_path, 'r', encoding="utf-8") as file:
+#         csvreader = csv.reader(file)
+#         return [row[0] for row in csvreader]
+
+# def get_data(dp, file_path, tickers):
+#     loop = asyncio.new_event_loop()
+#     asyncio.set_event_loop(loop)
+#     dp.write_stock_data(file_path, tickers)
+    
+# threads = []
+# tickers = get_symbols("data/tickers/tickers.csv")
+# ticker_split = [[] for _ in range(num_threads)]
+# i = 0
+# for ticker in tickers:
+#     ticker_split[i % num_threads].append(ticker)
+#     i += 1
+
+# for i in range(num_threads):
+#     thread = threading.Thread(target=get_data,args=(dp, f"data/core/new_stock_data{i}.pkl", ticker_split[i]))
+#     threads.append(thread)
+#     thread.start()
+
+
+# data = dp.read_stock_data_from_directory("data/stock_data")
+# print(dp.stock_data)
 # dp.options_annualized("data/intrinsic_value/20231017.csv")
 # dp.write_stock_data('data/core/new_stock_data.pkl')
 # data = dp.read_data('data/core/new_stock_data.pkl')
 # dp.write_currency_data("data/core/currency_data.pkl")
 # print(dp.read_currency_data("data/core/currency_data.pkl"))
 
-ticker_str = "FRT"
-print(dp.read_individual_stock_data(f"data/stock_data/{ticker_str}.pkl"))
+# ticker_str = "FRT"
+# print(dp.read_individual_stock_data(f"data/stock_data/{ticker_str}.pkl"))
 
 # tickers = ["ABNB", "SXP.TO", "MRG-UN.TO", "APR-UN.TO", "RET-A.V"]
 # dp.write_stock_data('data/core/test.pkl', tickers)
@@ -203,5 +252,6 @@ print(dp.read_individual_stock_data(f"data/stock_data/{ticker_str}.pkl"))
 
 # print(data["UMC"])
 
+# dp.update()
 
 

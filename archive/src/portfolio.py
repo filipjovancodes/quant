@@ -1,5 +1,5 @@
 import traceback
-from ib_insync import Position
+from ib_insync import IB, Position
 from data_dao import DataDAO
 from src.strategy import Strategy
 from src.strategy_builder import StrategyBuilder
@@ -10,8 +10,9 @@ from src.strategy_builder import StrategyBuilder
 # TODO more accurate option pricing rather than just pulling from yahoo finance
 # TODO MCD, M6B, CGX pricing
 class Portfolio:
-    def __init__(self, data_dao: DataDAO):
-        self.data_dao = data_dao
+    def __init__(self, ib: IB):
+        self.ib = ib
+        self.data_dao = DataDAO()
         self.strategies = {} # {str : Strategy}
 
     def add_strategy(self, position: Position) -> None:
@@ -22,7 +23,7 @@ class Portfolio:
             self.strategies[account] = {}
 
         if symbol not in self.strategies[account]:
-            self.strategies[account][symbol] = StrategyBuilder(self.data_dao)
+            self.strategies[account][symbol] = StrategyBuilder(self.ib, self.data_dao)
         self.strategies[account][symbol].add_position(position)
 
     def build_strategies(self):

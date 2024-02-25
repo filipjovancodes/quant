@@ -1,4 +1,5 @@
 class Option:
+    # TODO build own model with rate and rho data
     # ticker = ticker of option
     # right = type of option (call, put)
     # stock_price = stock price

@@ -15,7 +15,7 @@ def format_date(date: datetime) -> str:
     return output
 
 def format_datetime(date: str) -> datetime:
-    return datetime(year = int(date[0:4]), month = int(date[5:7]), day = int(date[8:10]))
+    return datetime(year = int(date[0:4]), month = int(date[4:6]), day = int(date[6:8]))
 
 def format_percentage(percent: str) -> float:
         percent = percent.removesuffix("%")

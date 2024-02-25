@@ -1,26 +1,24 @@
 import traceback
-from ib_insync import Position
+from ib_insync import IB, Position
 from src.strategy import Strategy
 from data_dao import DataDAO
 
 
 class CoveredCallStrategy(Strategy):
-    def __init__(self, position_list: list[Position], position_map: {}, data_dao: DataDAO):
+    def __init__(self, position_list: list[Position], position_map: {}, data_dao: DataDAO, ib: IB):
+        self.ib = ib
         self.position_list = position_list
         self.data_dao = data_dao
         self.stock = position_list[position_map["Stock"][1]]
         self.call = position_list[position_map["Call"][1]]
 
         # TODO refactor to ITM CC and OTM CC or CC to encompass both strats (probs with delta?)
-        try:
-            ticker = self.stock.contract.symbol
-            stock_price = self.data_dao.get_stock_price(ticker)
-            net_debt = self.data_dao.get_net_debt(ticker)
-            self.option = self.data_dao.get_option(ticker, net_debt, stock_price)
-            self.annualized = self.data_dao.get_option_annualized(self.option)
-        except:
-            print(traceback.format_exc())
-            self.annualized = 0.08
+        
+        option_contract = ib.reqContractDetails(self.call.contract)[0].contract # Need to do this to get exchange
+        self.option_ticker_data = self.ib.reqTickers(option_contract)[0] # TODO refactor the way reqTickers is called such that it is all done at once
+        self.awaitGreeks(self.option_ticker_data)
+        self.option = self.data_dao.get_option_ibkr(self.option_ticker_data)
+        self.annualized = self.data_dao.get_option_annualized(self.option)
 
     def pnl(self, end_currency = None) -> float:
         exchange_rate = self.data_dao.get_exchange_rate(self.stock.contract.currency, end_currency)

@@ -11,16 +11,15 @@ import utils.utils as utils
 
 
 class DataDAO:
-    def __init__(self, data_processor: DataProcessor):
-        self.data_processor = data_processor
+    def __init__(self):
+        self.data_processor = DataProcessor()
         self.initialize()
 
     def initialize(self):
-        self.stock_data = self.data_processor.read_stock_data("data/core/new_stock_data.pkl")
+        self.stock_data = self.data_processor.read_stock_data_from_directory("data/stock_data")
         self.tickers = [ticker for ticker, _ in self.stock_data.items()]
         self.currency_data = self.data_processor.read_data("data/core/currency_data.pkl")
         self.interest_rate = yf.Ticker("^IRX").fast_info["lastPrice"]/100 # TODO add to file?
-        # self.currency_data = self.data_processor.read_data("CURRENCY DIRECTORY")
 
     def get_exchange_rate(self, numerator, denominator):
         return self.currency_data[numerator] / self.currency_data[denominator]
@@ -40,7 +39,9 @@ class DataDAO:
         return self.stock_data[ticker]["balancesheet"].loc["Share Issued"].iloc[0]
 
     def get_net_debt(self, ticker):
-        return self.get_current_assets(ticker) - self.get_total_debt(ticker) 
+        # TODO
+        return self.stock_data[ticker]["balancesheet"].loc["Total Equity Gross Minority Interest"].iloc[0]  * self.get_financials_exchange_rate(ticker)
+        # return self.get_current_assets(ticker) - self.get_total_debt(ticker) 
 
     def get_total_debt(self, ticker):
         bs = self.stock_data[ticker]["balancesheet"]
@@ -55,10 +56,15 @@ class DataDAO:
     
     def get_cashflow_avg(self, ticker):
         return self.stock_data[ticker]["cashflow"].loc["Free Cash Flow"].mean() * self.get_financials_exchange_rate(ticker)
+
+    def get_cashflow_last_year(self, ticker):
+        return self.stock_data[ticker]["cashflow"].loc["Free Cash Flow"].iloc[0]
+    
+    def get_eps(self, ticker):
+        return self.stock_data[ticker]["financials"].loc["Basic EPS"].iloc[0]
     
     def get_pe(self, ticker):
-        return (self.stock_data[ticker]["info"]["currentPrice"] /
-            self.stock_data[ticker]["financials"].loc["Basic EPS"].iloc[0])
+        return (self.stock_data[ticker]["info"]["currentPrice"] / self.get_eps(ticker))
     
     def get_beta(self, ticker):
         return self.stock_data[ticker]["info"]["beta"]
@@ -96,6 +102,24 @@ class DataDAO:
             j += 1
 
         return result_strike
+    
+    def get_option_ibkr(self, option_ticker_data) -> Option:
+        print(option_ticker_data)
+        return Option(
+            ticker = option_ticker_data.contract.symbol,
+            right = option_ticker_data.contract.right,
+            stock_price = option_ticker_data.modelGreeks.undPrice,
+            strike = option_ticker_data.contract.strike,
+            expiry = option_ticker_data.contract.lastTradeDateOrContractMonth,
+            rate = None,
+            iv = option_ticker_data.modelGreeks.impliedVol,
+            option_price = option_ticker_data.modelGreeks.optPrice,
+            delta = option_ticker_data.modelGreeks.delta,
+            gamma = option_ticker_data.modelGreeks.gamma,
+            vega = option_ticker_data.modelGreeks.vega,
+            rho = None,
+            theta = option_ticker_data.modelGreeks.theta
+        )
 
     def get_option(self, ticker, net_debt, stock_price) -> Option:
         if self.stock_data[ticker]["option_chain"] is None:
