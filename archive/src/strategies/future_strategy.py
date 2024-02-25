@@ -1,6 +1,6 @@
 from ib_insync import Position
 from src.strategy import Strategy
-from data_dao import DataDAO
+from archive.data_dao import DataDAO
 
 # TODO implement pnl -> parse Future and add to position_map, market_val -> download future data
 class FutureStrategy(Strategy):

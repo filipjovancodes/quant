@@ -1,5 +1,5 @@
 from ib_insync import IB, Position
-from data_dao import DataDAO
+from archive.data_dao import DataDAO
 from src.strategies.covered_call_strategy import CoveredCallStrategy
 from src.strategies.etf_strategy import ETFStrategy
 from src.strategies.put_strategy import PutStrategy

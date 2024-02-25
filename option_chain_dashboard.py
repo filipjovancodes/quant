@@ -1,10 +1,7 @@
-from datetime import datetime
 import dash
 from dash import html, dcc, Output, Input, dash_table
 import sqlite3
 import jsonpickle
-import pytz
-import yfinance
 from local_objects import OptionData, OptionChainList, StockData
 
 
@@ -106,41 +103,3 @@ def update_metrics_callback(n):
 # Run the Dash app
 if __name__ == "__main__":
     app.run_server(debug=False, port=8051)
-
-exit()
-
-option_chain_dashboard = OptionChainDashboard()
-option_chain_dashboard.run_server()
-
-exit()
-
-# async def place_order(ib: IB, symbol):
-#     contract = Stock(symbol, "SMART", "USD")  # Define contract details
-#     # order = ...     # Define order details
-#     # orderId = await ib.placeOrderAsync(contract, order)
-#     data = await ib.reqTickersAsync(contract)  # Await the result of the async operation
-#     print(f"Data: {data}")
-
-# async def run():
-#     ib = IB()
-#     util.startLoop()
-#     await ib.connectAsync('127.0.0.1', 7496, clientId=1, readonly=True)  # Connect to IBKR TWS or IB Gateway
-
-#     # Execute async functions concurrently
-#     await asyncio.gather(
-#         place_order(ib, "AAPL"),  # Pass the coroutine object directly
-#         place_order(ib, "MSFT"),  # Pass the coroutine object directly
-#     )
-
-#     ib.disconnect()
-
-# if __name__ == "__main__":
-#     util.run(run())
-
-
-
-
-
-
-
-

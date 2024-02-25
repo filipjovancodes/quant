@@ -1,7 +1,7 @@
 import traceback
 from ib_insync import IB, Position
 from src.strategy import Strategy
-from data_dao import DataDAO
+from archive.data_dao import DataDAO
 
 
 class CoveredCallStrategy(Strategy):
