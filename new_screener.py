@@ -176,6 +176,9 @@ class YourClassName:
     def get_net_debt(self, stock_data):
         # TODO
         return stock_data.balanceSheet.loc["Total Equity Gross Minority Interest"].iloc[0]  * self.get_financials_exchange_rate(stock_data)
+    
+    def get_shareholders_equity(self, stock_data):
+        return stock_data.balanceSheet.loc["Total Equity Gross Minority Interest"].iloc[0]  * self.get_financials_exchange_rate(stock_data)
 
     def get_cashflow_avg(self, stock_data):
         return stock_data.cashFlow.loc["Free Cash Flow"].mean() * self.get_financials_exchange_rate(stock_data)
@@ -188,6 +191,9 @@ class YourClassName:
     
     def get_pe(self, stock_data):
         return stock_data.info["currentPrice"] / self.get_eps(stock_data)
+    
+    def industry(self, stock_data):
+        return stock_data.info["industry"] if "industry" in stock_data.info else ""
 
     def get_intrinsic_value(self, cashflow, net_debt, stock_price, share_issued):
         valuation = cashflow * 10
@@ -208,23 +214,23 @@ class YourClassName:
         qualified = []
         for stock_data in stock_data_list:
             try:
-                er = self.get_financials_exchange_rate(stock_data)
                 share_issued = self.get_share_issued(stock_data)
                 stock_price = self.get_stock_price(stock_data)
                 mcap = share_issued * stock_price
-                net_debt = self.get_net_debt(stock_data) * er
-                cashflow = self.get_cashflow_avg(stock_data) * er
                 pe = self.get_pe(stock_data)
                 eps = self.get_eps(stock_data)
-                intrinsic = self.get_intrinsic_value(cashflow, net_debt, stock_price, share_issued)
-                liquidation = self.get_liquidation_value(net_debt, stock_price, share_issued)
+                shareholders_equity = self.get_shareholders_equity(stock_data)
+                cashflow = self.get_cashflow_avg(stock_data)
+                intrinsic = self.get_intrinsic_value(cashflow, shareholders_equity, stock_price, share_issued)
+                liquidation = self.get_liquidation_value(shareholders_equity, stock_price, share_issued)
+                industry = self.industry(stock_data)
 
                 score = 0
-                if cashflow / mcap > 0.05 and pe < 20 and eps > 0:
-                    score += min(1, (intrinsic / stock_price)) * 0.5 # dcf value
-                    score += min(1, (liquidation / stock_price)) * 0.5 # liquidation value
+                if mcap > 3000000000 and "Bank" not in industry and "Insurance" not in industry:
+                    score += min(10, (intrinsic / stock_price)) * 0.5 # dcf value
+                    score += min(10, (liquidation / stock_price)) * 0.5 # liquidation value
 
-                qualified.append([score, stock_data])
+                    qualified.append([score, stock_data])
 
             except Exception as error:
                 print(error)
@@ -232,7 +238,18 @@ class YourClassName:
         qualified = sorted(qualified, key=lambda x: x[0], reverse=True)
 
         for (score, stock_data) in qualified[:100]:
-            print(score, stock_data.info["symbol"])
+            # share_issued = self.get_share_issued(stock_data)
+            # stock_price = self.get_stock_price(stock_data)
+            # mcap = share_issued * stock_price
+            # pe = self.get_pe(stock_data)
+            # eps = self.get_eps(stock_data)
+            # shareholders_equity = self.get_shareholders_equity(stock_data)
+            # cashflow = self.get_cashflow_avg(stock_data)
+            # liquidation = self.get_liquidation_value(shareholders_equity, stock_price, share_issued)
+            # intrinsic = self.get_intrinsic_value(cashflow, shareholders_equity, stock_price, share_issued)
+            # print(mcap, intrinsic, liquidation)
+
+            print(score, stock_data.info["symbol"], stock_data.info["industry"] if "industry" in stock_data.info else "")
 
 if __name__ == "__main__":
     your_instance = YourClassName()

@@ -1,6 +1,10 @@
 # Define a class to represent option chain data for a single expiry
+from datetime import datetime
+import sqlite3
 import jsonpickle
-
+import pytz
+import yfinance
+import utils.utils as utils
 
 class OptionPosition:
     def __init__(
@@ -19,7 +23,7 @@ class OptionPosition:
         # vega,
     ):
         self.symbol = ticker.contract.symbol
-        stock_price = yfinance.Ticker(stock_symbol).fast_info["lastPrice"]
+        stock_price = yfinance.Ticker(self.symbol).fast_info["lastPrice"]
         # TODO when ibkr fixes their shit change this
         # self.stockPrice = ticker.modelGreeks.undPrice
         self.stockPrice = stock_price
@@ -96,7 +100,10 @@ class OptionPosition:
         self.dividend = recent_dividend
         self.dividendPeriods = dividend_count
 
-        return recent_dividend * dividend_count
+        # return recent_dividend * dividend_count
+
+        # Override for new recent dividend
+        return 0.25 * (dividend_count - 1)
     
     def get_dividends(self):
         # Execute the SELECT statement to retrieve dividend information for the given ticker
@@ -121,7 +128,6 @@ class OptionPosition:
                 f"delta={self.delta}, theta={self.theta}, gamma={self.gamma}, "
                 f"vega={self.vega})")
 
-
 class OptionChainList:
     def __init__(self):
         self.option_chain_list = []
@@ -131,7 +137,6 @@ class OptionChainSingle:
         self.calls = calls
         self.puts = puts
         self.underlying = underlying
-
 
 # Define a class to represent option chain data for multiple expiries
 class OptionChainMultipleObject:
@@ -143,7 +148,6 @@ class OptionChainMultipleObject:
 
     def get_chain(self, expiry):
         return self.option_chain[expiry]
-
 
 class OptionData:
     def __init__(
@@ -232,6 +236,19 @@ class CashStrategyObject:
     # object for db serialization since dao cannot be serialized
     def __init__(self, cash_balance):
         self.cash_balance = cash_balance  
+
+class BorrowBoxStrategyObject:
+    def __init__(self, long_put, short_call, short_put, long_call):
+        self.long_put = long_put
+        self.short_call = short_call
+        self.short_put = short_put
+        self.long_call = long_call
+
+class CoveredCallPutStrategyObject:
+    def __init__(self, stock_position, call_position, put_position):
+        self.stock_position = stock_position
+        self.call_position = call_position
+        self.put_position = put_position
 
 class CoveredCallStrategy:
     def __init__(self, dao, stock_position, option_position):
@@ -555,6 +572,155 @@ class CurrencyHedgeStrategy:
    
     def expiry(self):
         return self.future_position.contract.lastTradeDateOrContractMonth
+
+class BorrowBoxStrategy:
+    def __init__(self, dao, long_put, short_call, short_put, long_call):
+        self.dao = dao
+        self.long_put = long_put
+        self.short_call = short_call
+        self.short_put = short_put
+        self.long_call = long_call
+        self.stock_details = self.dao.get_stock(self.long_put.contract.symbol)
+        self.long_put_details = self.dao.get_option(self.long_put.contract.conId)
+        self.short_call_details = self.dao.get_option(self.short_call.contract.conId)
+        self.short_put_details = self.dao.get_option(self.short_put.contract.conId)
+        self.long_call_details = self.dao.get_option(self.long_call.contract.conId)
+
+    def symbol(self):
+        return self.long_put.contract.symbol
+
+    def stock_exposure(self):
+        return 0
+    
+    def option_exposure(self):
+        return 0
+
+    def netPrice(self):
+        return self.long_put_details.optPrice + self.short_call_details.optPrice + self.short_put_details.optPrice + self.long_call_details.optPrice
+    
+    def quantity(self):
+        return self.long_put.position
+    
+    def spread(self):
+        return (self.long_call.contract.strike - self.long_put.contract.strike) * 100
+
+    def annualized(self):
+        expiry_days = (utils.format_datetime(self.long_put_details.expiry) - datetime.now()).days
+        return pow(1 + self.netPrice() / self.spread(), 365 / expiry_days) - 1
+    
+    def exchangeRateCAD(self):
+        if self.long_put.contract.currency == "USD":
+            return self.dao.get_currency()
+        return 1
+    
+    def totalCAD(self):
+        return (self.netPrice() * self.quantity() - self.spread()) * self.exchangeRateCAD()
+    
+    def returnCAD(self):
+        return self.netPrice()
+        
+    def sector(self):
+        return self.stock_details.info["sector"] if "sector" in self.stock_details.info else ""
+        
+    def industry(self):
+        return self.stock_details.info["industry"] if "industry" in self.stock_details.info else ""
+
+    # TODO calculate on own 
+    def beta(self):
+        return 0
+    
+    # TODO this is wrong because it should be delta on option price not delta on netPrice
+    def delta(self):
+        return 0
+    
+    def theta(self):
+        return 0
+    
+    def gamma(self):
+        return 0
+    
+    def vega(self):
+        return 0
+        
+    def expiry(self):
+        return self.long_put.contract.lastTradeDateOrContractMonth
+
+class CoveredCallPutStrategy:
+    def __init__(self, dao, stock_position, call_position, put_position):
+        self.dao = dao
+        self.stock_position = stock_position
+        self.call_position = call_position
+        self.put_position = put_position
+        self.stock_details = self.dao.get_stock(self.stock_position.contract.symbol)
+        self.call_details = self.dao.get_option(self.call_position.contract.conId)
+        self.put_details = self.dao.get_option(self.put_position.contract.conId)
+
+    def symbol(self):
+        return self.stock_position.contract.symbol
+
+    def stock_exposure(self):
+        return 0
+    
+    def option_exposure(self):
+        return 0
+
+    def netPrice(self):
+        return self.stock_details.fast_info["lastPrice"] - self.call_details.optPrice + self.put_details.optPrice
+    
+    def quantity(self):
+        return self.stock_position.position
+    
+    def annualized(self):
+        expiry_days = (utils.format_datetime(self.call_details.expiry) - datetime.now()).days
+        
+        dividend_return = self.dao.get_option_dividend_return(self.symbol(), expiry_days)
+
+        stock_price = self.stock_details.fast_info["lastPrice"]
+        call = self.call_details.optPrice
+        strike = self.call_details.strike
+
+        call_return = call + strike - stock_price
+        total_return = call_return + dividend_return - self.put_details.optPrice
+        
+        return pow(1 + total_return / self.netPrice(), 365 / expiry_days) - 1
+    
+    def exchangeRateCAD(self):
+        if self.stock_position.contract.currency == "USD":
+            return self.dao.get_currency()
+        return 1
+    
+    def totalCAD(self):
+        return self.netPrice() * self.quantity() * self.exchangeRateCAD()
+    
+    def returnCAD(self):
+        return self.totalCAD() * self.annualized()
+        
+    def sector(self):
+        return self.stock_details.info["sector"] if "sector" in self.stock_details.info else ""
+        
+    def industry(self):
+        return self.stock_details.info["industry"] if "industry" in self.stock_details.info else ""
+
+    # TODO calculate on own 
+    def beta(self):
+        return 0
+    
+    # TODO this is wrong because it should be delta on option price not delta on netPrice
+    def delta(self):
+        return 0
+    
+    def theta(self):
+        return 0
+    
+    def gamma(self):
+        return 0
+    
+    def vega(self):
+        return 0
+        
+    def expiry(self):
+        return self.call_position.contract.lastTradeDateOrContractMonth
+   
 
 class CashStrategy:
     def __init__(self, dao, cash_balance):

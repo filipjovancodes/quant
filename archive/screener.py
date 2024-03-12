@@ -78,6 +78,32 @@ class Screener:
 
         return share_iv
     
+    def screen_shareholders_value(self):
+        qualified, stock_data, option_data = [], [], []
+        for ticker in self.data_dao.tickers:
+            try:
+                share_issued = self.data_dao.get_share_issued(ticker)
+                stock_price = self.data_dao.get_stock_price(ticker)
+                mcap = share_issued * stock_price
+                cashflow = self.data_dao.get_cashflow_avg(ticker)
+                pe = self.data_dao.get_pe(ticker)
+                eps = self.data_dao.get_eps(ticker)
+                intrinsic = self.get_intrinsic_value(cashflow, net_debt, stock_price, share_issued)
+
+                stock_data.append([ticker, stock_price, share_issued, mcap, net_debt, cashflow, pe, intrinsic])
+                
+                if net_debt / mcap > 0.3 and cashflow / mcap > 0.1 and pe < 15 and intrinsic / stock_price > 1 and eps > 0:
+                    print(f"Qualified {ticker}")
+                    qualified.append(stock_data[-1])
+                    # option = self.data_dao.get_option(ticker, net_debt, stock_price)
+                    # print(option)
+                    # option_data.append(option)
+                    # qualified.append(stock_data[-1] + option_data[-1].to_list())
+            except Exception as error:
+            #     if not type(error) == KeyError:
+            #         print(traceback.format_exc())
+                print(error)
+    
     def screen_intrinsic_value(self):
         qualified, stock_data, option_data = [], [], []
         for ticker in self.data_dao.tickers:

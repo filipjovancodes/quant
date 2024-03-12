@@ -9,7 +9,9 @@ import jsonpickle
 import yfinance
 
 from local_objects import (
+    BorrowBoxStrategyObject,
     CashStrategyObject,
+    CoveredCallPutStrategyObject,
     CoveredCallStrategy,
     CoveredCallStrategyObject,
     CurrencyHedgeStrategy,
@@ -204,7 +206,11 @@ class DAO:
         call = option.optPrice
         strike = option.strike
 
-        call_return = call + strike - stock_price
+        if strike > stock_price:
+            call_return = call
+        else:
+            call_return = call + strike - stock_price
+
         total_return = call_return + dividend_return
         cost_base = stock_price - call
 
@@ -293,7 +299,8 @@ class DAO:
         for account in account_list:
             positions = self.ib.positions(account)
             for position in positions:
-                sql = "INSERT OR REPLACE INTO positions (accountId, conId, data) VALUES (?, ?, ?)"
+                print(position)
+                sql = "INSERT OR REPLACE INTO Positions (accountId, conId, data) VALUES (?, ?, ?)"
                 values = [
                     position.account,
                     position.contract.conId,
@@ -428,6 +435,145 @@ class DAO:
         for db_item in db_items:
             self.cursor.execute(sql, db_item)
 
+    def update_strategy_data_new(self):
+        print("Updating strategy data")
+
+        # TODO in future just do most recent date for get
+        self.cursor.execute("DROP TABLE IF EXISTS Strategies;")
+        self.conn.commit()
+
+        # Create the stocks table if it doesn't exist
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS Strategies (
+                            row INT,
+                            symbol TEXT, 
+                            strategy TEXT,
+                            PRIMARY KEY (row, symbol)
+                            )"""
+        )
+
+        organizer = {}
+
+        labels = self.get_strategy_labels()
+        for label in labels:
+            (accountId, conId, symbol, contractType, expiry, quantity, strike, strategyId, strategyType, strategyPlace) = label
+
+            position = self.get_position(accountId, conId)
+            if contractType == "Stock":
+                position = PositionData(
+                    contract=position.contract,
+                    position=quantity,
+                    avgCost=position.avgCost,
+                )
+
+            if strategyId not in organizer:
+                organizer[strategyId] = {}
+            
+            organizer[strategyId][strategyPlace] = [strategyType, position]
+
+        strategy_list = []
+        for strategyId, strategyDict in organizer.items():
+            position_list = []
+            strategy_type = None
+            for strategyPlace, [strategyType, position] in strategyDict.items():
+                symbol = position.contract.symbol
+                strategy_type = strategyType
+                position_list.append([strategyPlace, position])
+            
+            position_list = sorted(position_list, key=lambda x: x[0])
+            position_list = [x[1] for x in position_list]
+
+            # TODO more strategies
+            if strategy_type == "CoveredCall":
+                strategy = CoveredCallStrategyObject(*position_list)
+            elif strategy_type == "CurrencyHedge":
+                strategy = CurrencyHedgeStrategyObject(*position_list)
+            elif strategy_type == "LongStock":
+                strategy = LongStockStrategyObject(*position_list)
+            elif strategy_type == "PutHedge":
+                strategy = PutHedgeStrategyObject(*position_list)
+            elif strategy_type == "BoxBorrow":
+                strategy = BorrowBoxStrategyObject(*position_list)
+            elif strategy_type == "CoveredCallPut":
+                strategy = CoveredCallPutStrategyObject(*position_list)
+
+            strategy_list.append([strategyId, symbol, jsonpickle.encode(strategy)])
+        
+        cash_strategy = CashStrategyObject(self.get_cash_balance())
+        strategy_list.append([100, "Cash", jsonpickle.encode(cash_strategy)])
+
+        sql = """INSERT OR REPLACE INTO Strategies (row, symbol, strategy) 
+                    VALUES (?, ?, ?)"""
+
+        for db_item in strategy_list:
+            self.cursor.execute(sql, db_item)
+        
+    def update_strategy_labels(self):
+        print("Updating strategy labels")
+
+        self.cursor.execute("""DROP TABLE IF EXISTS StrategyLabels;""")
+        self.conn.commit()
+
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS StrategyLabels (
+                accountId TEXT,
+                conId INT,
+                ticker TEXT,
+                type TEXT,
+                expiry TEXT,
+                quantity REAL,
+                strike REAL,
+                strategyId INT,
+                strategyType TEXT,
+                place INT
+            );"""
+        )
+
+        positions = self.get_positions()
+
+        to_insert = []
+        for position in positions:
+            # print(position)
+
+            if isinstance(position.contract, Option):
+                to_insert.append([
+                    position.account,
+                    position.contract.conId,
+                    position.contract.symbol,
+                    position.contract.right,
+                    position.contract.lastTradeDateOrContractMonth,
+                    position.position,
+                    position.contract.strike,
+                    None,
+                    None,
+                    None
+                ])
+            else:
+                if isinstance(position.contract, Stock):
+                    type = "Stock"
+                elif isinstance(position.contract, Future):
+                    type = "Future"
+                else:
+                    type = "Other"
+
+                to_insert.append([
+                    position.account,
+                    position.contract.conId,
+                    position.contract.symbol,
+                    type,
+                    None,
+                    position.position,
+                    None,
+                    None,
+                    None,
+                    None
+                ])
+
+        for insertion in to_insert:
+            print(insertion)
+            sql = "INSERT OR REPLACE INTO StrategyLabels (accountId, conId, ticker, type, expiry, quantity, strike, strategyId, strategyType, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            self.cursor.execute(sql, insertion)
+
     def get_dividends(self, ticker):
         # Execute the SELECT statement to retrieve dividend information for the given ticker
         stock_data = self.get_stock(ticker)
@@ -449,7 +595,7 @@ class DAO:
 
     def get_position(self, accountId, conId):
         rows = self.cursor.execute(
-            f"SELECT * FROM Strategies WHERE account = ? AND conId = ?",
+            f"SELECT * FROM Positions WHERE accountId = ? AND conId = ?",
             (accountId, conId),
         ).fetchone()
         return jsonpickle.decode(rows[2])
@@ -457,6 +603,9 @@ class DAO:
     def get_strategies(self):
         rows = self.cursor.execute("SELECT * FROM Strategies").fetchall()
         return [jsonpickle.decode(row[2]) for row in rows if row[2] is not None]
+
+    def get_strategy_labels(self):
+        return self.cursor.execute("SELECT * FROM StrategyLabels").fetchall()
 
     def get_strategy(self, symbol):
         rows = self.cursor.execute(

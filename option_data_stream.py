@@ -9,7 +9,7 @@ import yfinance
 from local_objects import OptionChainList, OptionPosition
 
 
-symbol = "CCRN"
+symbol = "TSLA"
 
 class OptionChain:
     def __init__(self, ib, symbol):

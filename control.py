@@ -3,27 +3,28 @@ from portfolio_dashboard import PortfolioDashboard
 
 
 def update_data(dao):
-    # dao.update_rfr_data()
-    # dao.commit()
-
-    # dao.update_currency_data()
-    # dao.commit()
-
-    # dao.update_position_data()
-    # dao.commit()
-
-    # dao.update_futures_data()
-    # dao.commit()
-
-    # dao.update_stock_data()
-    # dao.commit()
-
-    # dao.update_option_data()
-    # dao.commit()
-
-    dao.update_strategy_data()
+    dao.update_rfr_data()
     dao.commit()
 
+    dao.update_currency_data()
+    dao.commit()
+
+    dao.update_position_data()
+    dao.commit()
+
+    dao.update_futures_data()
+    dao.commit()
+
+    dao.update_stock_data()
+    dao.commit()
+
+    dao.update_option_data()
+    dao.commit()
+
+    dao.update_strategy_data_new()
+    dao.commit()
+
+    pass
 
 
 

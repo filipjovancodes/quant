@@ -3,8 +3,12 @@ from collections import Counter
 from ib_insync import IB, Option, Stock, util
 import pandas as pd
 from local_objects import (
+    BorrowBoxStrategy,
+    BorrowBoxStrategyObject,
     CashStrategy,
     CashStrategyObject,
+    CoveredCallPutStrategy,
+    CoveredCallPutStrategyObject,
     CoveredCallStrategy,
     CoveredCallStrategyObject,
     CurrencyHedgeStrategy,
@@ -64,6 +68,21 @@ class PortfolioDashboard:
                 )
             elif isinstance(strategy_object, CashStrategyObject):
                 strategy = CashStrategy(self.dao, strategy_object.cash_balance)
+            elif isinstance(strategy_object, BorrowBoxStrategyObject):
+                strategy = BorrowBoxStrategy(
+                    self.dao,
+                    strategy_object.long_put,
+                    strategy_object.short_call,
+                    strategy_object.short_put,
+                    strategy_object.long_call
+                )
+            elif isinstance(strategy_object, CoveredCallPutStrategyObject):
+                strategy = CoveredCallPutStrategy(
+                    self.dao,
+                    strategy_object.stock_position,
+                    strategy_object.call_position,
+                    strategy_object.put_position
+                )
 
             self.portfolio_strategy_list.append(strategy)
 
@@ -160,9 +179,12 @@ class PortfolioDashboard:
         )
 
     def covered_call_table(self):
+        sorted_values = sorted(self.strategy_values, key=lambda x: x.symbol)
+        result = [x.to_list() for x in sorted_values]
+
         # Create DataFrame for strategy values
         df = pd.DataFrame(
-            [x.to_list() for x in self.strategy_values],
+            result,
             columns=[
                 "Symbol",
                 "Net Price",

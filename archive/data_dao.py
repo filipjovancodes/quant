@@ -51,6 +51,9 @@ class DataDAO:
             td = bs.loc["Total Liabilities Net Minority Interest"].iloc[0]
         return td * self.get_financials_exchange_rate(ticker)
     
+    def get_shareholders_equity(self, ticker):
+        return self.stock_data[ticker]["balancesheet"].loc["Total Equity Gross Minority Interest"].iloc[0]  * self.get_financials_exchange_rate(ticker)
+
     def get_current_assets(self, ticker):
         return self.stock_data[ticker]["balancesheet"].loc["Current Assets"].iloc[0]  * self.get_financials_exchange_rate(ticker)
     

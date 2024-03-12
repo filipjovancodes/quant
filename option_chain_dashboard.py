@@ -5,7 +5,7 @@ import jsonpickle
 from local_objects import OptionData, OptionChainList, StockData
 
 
-symbol = "CCRN"
+symbol = "WLKP"
 
 # Define your Dash app
 app = dash.Dash(__name__)
@@ -24,6 +24,7 @@ app.layout = html.Div(
                 {'name': 'Ask Price', 'id': 'askPrice'},
                 {'name': 'Ask Size', 'id': 'askSize'},
                 {'name': 'Model Price', 'id': 'optionPrice'},
+                {'name': 'Annualized', 'id': 'annualized'},
                 {'name': 'Strike', 'id': 'strike'},
                 {'name': 'Expiry', 'id': 'expiry'},
                 {'name': 'Dividend', 'id': 'dividend'},
@@ -37,7 +38,6 @@ app.layout = html.Div(
                 {'name': 'Total Return', 'id': 'totalReturn'},
                 {'name': 'Cost Base', 'id': 'costBase'},
                 {'name': 'Days to Expiry', 'id': 'daysToExpiry'},
-                {'name': 'Annualized', 'id': 'annualized'},
                 {'name': 'Protection', 'id': 'protection'},
                 {'name': 'Break Even', 'id': 'breakEven'}
             ],
@@ -80,6 +80,7 @@ def update_metrics_callback(n):
             'askPrice': option.ask,
             'askSize': option.askSize,
             'optionPrice': round(option.optionPrice, 2),
+            'annualized': round(option.annualized() * 100, 2),
             'strike': option.strike,
             'expiry': option.expiry,
             'dividend': option.dividend,
@@ -93,7 +94,6 @@ def update_metrics_callback(n):
             'totalReturn': round(option.totalReturn(), 2),
             'costBase': round(option.costBase(), 2),
             'daysToExpiry': option.daysToExpiry(),
-            'annualized': round(option.annualized() * 100, 2),
             'protection': round(option.protection() * 100, 2),
             'breakEven': round(option.breakEven(), 2),
         })
